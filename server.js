@@ -279,17 +279,24 @@ io.on("connection", (socket) => {
       room.board = data.board;
       room.gameStatus = data.gameStatus;
       room.blackWordRevealed = data.blackWordRevealed;
-      room.currentTeam = data.currentTeam; // Importante: atualizar currentTeam
+      room.currentTeam = data.currentTurn;
 
+      // Enviar para TODOS os clientes na sala (incluindo quem enviou)
       io.to(data.roomId).emit("room-data", {
         board: room.board,
         players: room.players,
         gameStatus: room.gameStatus,
         blackWordRevealed: room.blackWordRevealed,
-        currentTeam: room.currentTeam, // Enviar currentTeam atualizado
+        currentTeam: room.currentTeam,
+        spymasters: room.spymasters,
       });
 
-      console.log(`Board updated and emitted to room: ${data.roomId}`);
+      // Enviar evento específico de mudança de turno
+      io.to(data.roomId).emit("turn-changed", { newTurn: room.currentTeam });
+
+      console.log(
+        `Board updated and emitted to room: ${data.roomId}, current team: ${room.currentTeam}`
+      );
     }
   });
 
@@ -437,16 +444,32 @@ function createInitialBoard() {
   const uniqueWords = [...new Set(words)];
   const shuffledWords = shuffleArray([...uniqueWords]).slice(0, 25);
 
+  // Gerar índices fixos para as imagens no servidor
+  const redIndices = shuffleArray(Array.from({ length: 9 }, (_, i) => i));
+  const blueIndices = shuffleArray(Array.from({ length: 8 }, (_, i) => i));
+
+  let redCounter = 0;
+  let blueCounter = 0;
+
   const board = [];
   for (let row = 0; row < 5; row++) {
     board[row] = [];
     for (let col = 0; col < 5; col++) {
       const index = row * 5 + col;
+      const category = shuffledCategories[index];
+
+      let imageIndex = 0;
+      if (category === "red") {
+        imageIndex = redIndices[redCounter++];
+      } else if (category === "blue") {
+        imageIndex = blueIndices[blueCounter++];
+      }
+
       board[row][col] = {
         word: shuffledWords[index],
         revealed: false,
-        category: shuffledCategories[index],
-        // Remover imageIndex daqui - será gerado no frontend
+        category: category,
+        imageIndex: imageIndex,
       };
     }
   }
