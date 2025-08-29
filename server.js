@@ -122,7 +122,21 @@ io.on("connection", (socket) => {
       socket.emit("room-data", { message: "Room does not exist" });
     }
   });
+  socket.on("pass-turn", ({ roomId, newTurn }) => {
+    const room = rooms[roomId];
+    if (room) {
+      room.currentTeam = newTurn;
 
+      // Envia para TODOS os jogadores na sala
+      io.to(roomId).emit("room-data", {
+        currentTeam: room.currentTeam,
+        message: `Turn passed to ${newTurn} team`,
+      });
+
+      // Também emite o evento específico de mudança de turno
+      io.to(roomId).emit("turn-changed", { newTurn });
+    }
+  });
   // Manipula o pedido para ser Spymaster
   socket.on("set-spymaster", ({ roomId, team }) => {
     const room = rooms[roomId];
@@ -202,14 +216,14 @@ io.on("connection", (socket) => {
       room.board = data.board;
       room.gameStatus = data.gameStatus;
       room.blackWordRevealed = data.blackWordRevealed;
-      room.currentTeam = data.currentTeam;
+      room.currentTeam = data.currentTeam; // Importante: atualizar currentTeam
 
       io.to(data.roomId).emit("room-data", {
         board: room.board,
         players: room.players,
         gameStatus: room.gameStatus,
         blackWordRevealed: room.blackWordRevealed,
-        currentTeam: room.currentTeam,
+        currentTeam: room.currentTeam, // Enviar currentTeam atualizado
       });
 
       console.log(`Board updated and emitted to room: ${data.roomId}`);
