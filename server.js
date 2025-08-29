@@ -47,7 +47,7 @@ io.on("connection", (socket) => {
         spymasters: { blue: null, red: null },
         gameStatus: "playing",
         blackWordRevealed: false,
-        currentTeam: "red", // VERMELHO SEMPRE PRIMEIRO
+        currentTeam: "red", // SEMPRE VERMELHO
       };
       // resto do código...
     }
@@ -369,31 +369,38 @@ function shuffleArray(array) {
   return shuffled;
 }
 function createInitialBoard() {
-  // Criar array de categorias com quantidade correta
-  const cardTypes = [];
-  for (let i = 0; i < 9; i++)
-    cardTypes.push({ category: "red", imageIndex: i });
-  for (let i = 0; i < 8; i++)
-    cardTypes.push({ category: "blue", imageIndex: i });
-  for (let i = 0; i < 7; i++)
-    cardTypes.push({ category: "neutral", imageIndex: 0 });
-  cardTypes.push({ category: "black", imageIndex: 0 });
+  const categories = [
+    "red",
+    "red",
+    "red",
+    "red",
+    "red",
+    "red",
+    "red",
+    "red",
+    "red",
+    "blue",
+    "blue",
+    "blue",
+    "blue",
+    "blue",
+    "blue",
+    "blue",
+    "blue",
+    "neutral",
+    "neutral",
+    "neutral",
+    "neutral",
+    "neutral",
+    "neutral",
+    "neutral",
+    "black",
+  ];
 
-  // Embaralhar os tipos de carta
-  for (let i = cardTypes.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [cardTypes[i], cardTypes[j]] = [cardTypes[j], cardTypes[i]];
-  }
-
-  // Pegar palavras únicas embaralhadas
+  const shuffledCategories = shuffleArray([...categories]);
   const uniqueWords = [...new Set(words)];
-  const shuffledWords = [];
-  for (let i = uniqueWords.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [uniqueWords[i], uniqueWords[j]] = [uniqueWords[j], uniqueWords[i]];
-  }
+  const shuffledWords = shuffleArray([...uniqueWords]).slice(0, 25);
 
-  // Criar board 5x5
   const board = [];
   for (let row = 0; row < 5; row++) {
     board[row] = [];
@@ -402,8 +409,8 @@ function createInitialBoard() {
       board[row][col] = {
         word: shuffledWords[index],
         revealed: false,
-        category: cardTypes[index].category,
-        imageIndex: cardTypes[index].imageIndex,
+        category: shuffledCategories[index],
+        // Remover imageIndex daqui - será gerado no frontend
       };
     }
   }
