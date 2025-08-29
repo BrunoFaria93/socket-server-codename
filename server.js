@@ -39,28 +39,23 @@ io.on("connection", (socket) => {
   );
 
   // Manipula a criação de sala
+  // Manipula a criação de sala
   socket.on("create-room", (roomId) => {
     console.log(`Create room request: ${roomId}`);
     if (!rooms[roomId]) {
-      const initialBoard = createInitialBoard();
-      console.log("Initial board created:", initialBoard[0][0]); // Debug da primeira célula
-
       rooms[roomId] = {
-        board: initialBoard,
+        board: createInitialBoard(),
         players: {},
         spymasters: { blue: null, red: null },
         gameStatus: "playing",
         blackWordRevealed: false,
         currentTeam: "blue",
       };
-
       io.emit(
         "rooms-update",
         Object.keys(rooms).map((id) => ({ roomId: id }))
       );
-      console.log(`Room created: ${roomId}`);
     }
-
     socket.join(roomId);
     const playerColor = assignPlayerColor(roomId);
     rooms[roomId].players[socket.id] = {
@@ -68,9 +63,8 @@ io.on("connection", (socket) => {
       isSpymaster: false,
     };
 
-    console.log("Sending board to client:", rooms[roomId].board[0][0]); // Debug
-
-    socket.emit("room-data", {
+    // Enviar estado COMPLETO da sala
+    const roomData = {
       roomId,
       message: "You joined the room!",
       board: rooms[roomId].board,
@@ -79,8 +73,9 @@ io.on("connection", (socket) => {
       gameStatus: rooms[roomId].gameStatus,
       currentTeam: rooms[roomId].currentTeam,
       spymasters: rooms[roomId].spymasters,
-    });
+    };
 
+    socket.emit("room-data", roomData);
     socket.to(roomId).emit("room-data", {
       message: `Client ${socket.id} joined the room!`,
       board: rooms[roomId].board,
@@ -89,6 +84,41 @@ io.on("connection", (socket) => {
       currentTeam: rooms[roomId].currentTeam,
       spymasters: rooms[roomId].spymasters,
     });
+  });
+
+  // Manipula o ingresso na sala
+  socket.on("join-room", (roomId) => {
+    if (rooms[roomId]) {
+      socket.join(roomId);
+      const playerColor = assignPlayerColor(roomId);
+      rooms[roomId].players[socket.id] = {
+        color: playerColor,
+        isSpymaster: false,
+      };
+
+      // Enviar estado EXATO da sala
+      socket.emit("room-data", {
+        roomId,
+        message: "You joined the room!",
+        board: rooms[roomId].board,
+        playerColor,
+        players: rooms[roomId].players,
+        gameStatus: rooms[roomId].gameStatus,
+        currentTeam: rooms[roomId].currentTeam,
+        spymasters: rooms[roomId].spymasters,
+      });
+
+      socket.to(roomId).emit("room-data", {
+        message: `Client ${socket.id} joined the room!`,
+        board: rooms[roomId].board,
+        players: rooms[roomId].players,
+        gameStatus: rooms[roomId].gameStatus,
+        currentTeam: rooms[roomId].currentTeam,
+        spymasters: rooms[roomId].spymasters,
+      });
+    } else {
+      socket.emit("room-data", { message: "Room does not exist" });
+    }
   });
   socket.on("reset-board", (roomId, newBoard) => {
     // Envia o novo board para todos os jogadores na sala, exceto o que enviou
@@ -167,24 +197,27 @@ io.on("connection", (socket) => {
   socket.on("reset-game", (roomId) => {
     const room = rooms[roomId];
     if (room) {
-      // Reseta completamente o estado da sala
-      room.board = createInitialBoard();
+      // Criar novo board
+      const newBoard = createInitialBoard();
+
+      // Atualizar TUDO na sala
+      room.board = newBoard;
       room.gameStatus = "playing";
       room.blackWordRevealed = false;
       room.currentTeam = "blue";
 
-      // Notifica TODOS os jogadores na sala sobre o reset
+      // Enviar para TODOS na sala o estado COMPLETO
       io.to(roomId).emit("room-data", {
         board: room.board,
         players: room.players,
         gameStatus: room.gameStatus,
         blackWordRevealed: room.blackWordRevealed,
         currentTeam: room.currentTeam,
+        spymasters: room.spymasters,
       });
 
-      console.log(`Game reset for room: ${roomId}`);
-    } else {
-      socket.emit("room-data", { message: "Room does not exist" });
+      // Também enviar reset-board para garantir
+      io.to(roomId).emit("reset-board", newBoard, "playing", 9, 8);
     }
   });
   socket.on("card-clicked", (data) => {
