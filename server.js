@@ -38,20 +38,56 @@ io.on("connection", (socket) => {
     Object.keys(rooms).map((roomId) => ({ roomId }))
   );
 
-  // Manipula a criação de sala
   socket.on("create-room", (roomId) => {
+    console.log(`Create room request: ${roomId}`);
     if (!rooms[roomId]) {
+      const initialBoard = createInitialBoard();
+      console.log("Initial board created:", initialBoard[0][0]);
+
       rooms[roomId] = {
-        board: createInitialBoard(),
+        board: initialBoard,
         players: {},
         spymasters: { blue: null, red: null },
         gameStatus: "playing",
         blackWordRevealed: false,
-        currentTeam: "red", // SEMPRE VERMELHO
+        currentTeam: "blue",
       };
-      // resto do código...
+
+      io.emit(
+        "rooms-update",
+        Object.keys(rooms).map((id) => ({ roomId: id }))
+      );
+      console.log(`Room created: ${roomId}`);
     }
-    // resto do código...
+
+    socket.join(roomId);
+    const playerColor = assignPlayerColor(roomId);
+    rooms[roomId].players[socket.id] = {
+      color: playerColor,
+      isSpymaster: false,
+    };
+
+    console.log("Sending board to client:", rooms[roomId].board[0][0]);
+
+    socket.emit("room-data", {
+      roomId,
+      message: "You joined the room!",
+      board: rooms[roomId].board,
+      playerColor,
+      players: rooms[roomId].players,
+      gameStatus: rooms[roomId].gameStatus,
+      currentTeam: rooms[roomId].currentTeam,
+      spymasters: rooms[roomId].spymasters,
+    });
+
+    socket.to(roomId).emit("room-data", {
+      message: `Client ${socket.id} joined the room!`,
+      board: rooms[roomId].board,
+      players: rooms[roomId].players,
+      gameStatus: rooms[roomId].gameStatus,
+      currentTeam: rooms[roomId].currentTeam,
+      spymasters: rooms[roomId].spymasters,
+    });
   });
 
   // No reset-game
