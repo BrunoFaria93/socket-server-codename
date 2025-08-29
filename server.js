@@ -147,13 +147,13 @@ io.on("connection", (socket) => {
   socket.on("reset-game", (roomId) => {
     const room = rooms[roomId];
     if (room) {
-      // Reseta o estado do jogo
-      room.board = createInitialBoard(); // Certifique-se de que isso cria um tabuleiro com 25 cartas
+      // Reseta completamente o estado da sala
+      room.board = createInitialBoard();
       room.gameStatus = "playing";
       room.blackWordRevealed = false;
       room.currentTeam = "blue";
 
-      // Notifica todos os jogadores na sala sobre o reset
+      // Notifica TODOS os jogadores na sala sobre o reset
       io.to(roomId).emit("room-data", {
         board: room.board,
         players: room.players,
@@ -224,20 +224,17 @@ io.on("connection", (socket) => {
     const cell = room.board[row][col];
     const player = room.players[socket.id];
 
-    if (!player) return; // Verifica se o jogador está na sala
+    if (!player) return;
 
     if (!player.isSpymaster && cell.revealed) {
-      // Se não for Spymaster e a célula já foi revelada, não faça nada
       return;
     }
 
-    // Se o jogador for o Spymaster, revela a cor de todos os quadrados
     if (player.isSpymaster) {
       room.board = room.board.map((rowArr) =>
         rowArr.map((cell) => ({ ...cell, revealed: true }))
       );
     } else {
-      // Se o jogador não for Spymaster, revela apenas o quadrado clicado
       const newBoard = room.board.map((rowArr, rowIndex) =>
         rowArr.map((cell, colIndex) =>
           rowIndex === row && colIndex === col
@@ -246,25 +243,25 @@ io.on("connection", (socket) => {
         )
       );
 
-      // Atualiza o status do jogo com base no tipo de palavra
       let gameStatus = room.gameStatus;
       let blackWordRevealed = room.blackWordRevealed;
+      let currentTeam = room.currentTeam;
+
       if (cell.category === "black") {
         gameStatus = "lost";
         blackWordRevealed = true;
-      } else if (cell.category === room.currentTeam) {
-        room.currentTeam = room.currentTeam === "blue" ? "red" : "blue";
-      } else {
-        room.currentTeam = room.currentTeam === "blue" ? "red" : "blue";
+      } else if (cell.category !== currentTeam) {
+        // Se clicou em carta que NÃO é da equipe atual, passa a vez
+        currentTeam = currentTeam === "blue" ? "red" : "blue";
       }
+      // Se clicou em carta da própria equipe, continua o turno
 
-      // Atualiza o estado do jogo
       room.board = newBoard;
       room.gameStatus = gameStatus;
       room.blackWordRevealed = blackWordRevealed;
+      room.currentTeam = currentTeam;
     }
 
-    // Emite a atualização do tabuleiro para todos os jogadores na sala
     io.to(roomId).emit("room-data", {
       board: room.board,
       players: room.players,
@@ -279,9 +276,9 @@ io.on("connection", (socket) => {
       });
     }
   });
-  socket.on("reset-board", (roomId, newBoard, newStatus) => {
-    io.to(roomId).emit("reset-board", newBoard, newStatus);
-  });
+  // socket.on("reset-board", (roomId, newBoard, newStatus) => {
+  //   io.to(roomId).emit("reset-board", newBoard, newStatus);
+  // });
   // Manipula o pedido para deletar uma sala
   socket.on("delete-room", (roomId) => {
     console.log(`Delete room request: ${roomId}`);
@@ -327,16 +324,15 @@ io.on("connection", (socket) => {
 });
 
 function shuffleArray(array) {
-  // Função para embaralhar um array usando o algoritmo Fisher-Yates
-  for (let i = array.length - 1; i > 0; i--) {
+  // Cria uma cópia do array para não alterar o original
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]]; // Troca os elementos
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  return array;
+  return shuffled;
 }
-
 function createInitialBoard() {
-  // Cria um array com a distribuição fixa de categorias
   const categories = [
     "red",
     "red",
@@ -365,19 +361,42 @@ function createInitialBoard() {
     "black", // 1 preta
   ];
 
-  // Embaralha as categorias
-  const shuffledCategories = shuffleArray(categories).slice(0, 25);
+  const shuffledCategories = shuffleArray(categories);
 
-  // Embaralha o array de palavras para garantir aleatoriedade
-  const shuffledWords = shuffleArray(words);
+  // Garantir que temos palavras únicas suficientes
+  const uniqueWords = Array.from(new Set(words));
+  if (uniqueWords.length < 25) {
+    throw new Error("Não há palavras únicas suficientes");
+  }
 
-  // Gera o tabuleiro 5x5
+  const shuffledWords = shuffleArray(uniqueWords).slice(0, 25);
+
+  // Gerar índices únicos para as imagens
+  const redIndices = shuffleArray(Array.from({ length: 9 }, (_, i) => i));
+  const blueIndices = shuffleArray(Array.from({ length: 8 }, (_, i) => i));
+
+  let redIndexCounter = 0;
+  let blueIndexCounter = 0;
+
   const board = Array.from({ length: 5 }, (_, row) =>
-    Array.from({ length: 5 }, (_, col) => ({
-      word: shuffledWords[row * 5 + col], // Usa palavras do array embaralhado
-      revealed: false,
-      category: shuffledCategories[row * 5 + col], // Atribui a categoria embaralhada
-    }))
+    Array.from({ length: 5 }, (_, col) => {
+      const index = row * 5 + col;
+      const category = shuffledCategories[index];
+
+      let imageIndex = 0;
+      if (category === "red") {
+        imageIndex = redIndices[redIndexCounter++];
+      } else if (category === "blue") {
+        imageIndex = blueIndices[blueIndexCounter++];
+      }
+
+      return {
+        word: shuffledWords[index],
+        revealed: false,
+        category: category,
+        imageIndex: imageIndex,
+      };
+    })
   );
 
   return board;
