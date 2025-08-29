@@ -39,9 +39,7 @@ io.on("connection", (socket) => {
   );
 
   // Manipula a criação de sala
-  // Manipula a criação de sala
   socket.on("create-room", (roomId) => {
-    console.log(`Create room request: ${roomId}`);
     if (!rooms[roomId]) {
       rooms[roomId] = {
         board: createInitialBoard(),
@@ -49,41 +47,31 @@ io.on("connection", (socket) => {
         spymasters: { blue: null, red: null },
         gameStatus: "playing",
         blackWordRevealed: false,
-        currentTeam: "blue",
+        currentTeam: "red", // VERMELHO SEMPRE PRIMEIRO
       };
-      io.emit(
-        "rooms-update",
-        Object.keys(rooms).map((id) => ({ roomId: id }))
-      );
+      // resto do código...
     }
-    socket.join(roomId);
-    const playerColor = assignPlayerColor(roomId);
-    rooms[roomId].players[socket.id] = {
-      color: playerColor,
-      isSpymaster: false,
-    };
+    // resto do código...
+  });
 
-    // Enviar estado COMPLETO da sala
-    const roomData = {
-      roomId,
-      message: "You joined the room!",
-      board: rooms[roomId].board,
-      playerColor,
-      players: rooms[roomId].players,
-      gameStatus: rooms[roomId].gameStatus,
-      currentTeam: rooms[roomId].currentTeam,
-      spymasters: rooms[roomId].spymasters,
-    };
+  // No reset-game
+  socket.on("reset-game", (roomId) => {
+    const room = rooms[roomId];
+    if (room) {
+      room.board = createInitialBoard();
+      room.gameStatus = "playing";
+      room.blackWordRevealed = false;
+      room.currentTeam = "red"; // VERMELHO SEMPRE PRIMEIRO
 
-    socket.emit("room-data", roomData);
-    socket.to(roomId).emit("room-data", {
-      message: `Client ${socket.id} joined the room!`,
-      board: rooms[roomId].board,
-      players: rooms[roomId].players,
-      gameStatus: rooms[roomId].gameStatus,
-      currentTeam: rooms[roomId].currentTeam,
-      spymasters: rooms[roomId].spymasters,
-    });
+      io.to(roomId).emit("room-data", {
+        board: room.board,
+        players: room.players,
+        gameStatus: room.gameStatus,
+        blackWordRevealed: room.blackWordRevealed,
+        currentTeam: room.currentTeam,
+        spymasters: room.spymasters,
+      });
+    }
   });
 
   // Manipula o ingresso na sala
@@ -381,68 +369,41 @@ function shuffleArray(array) {
   return shuffled;
 }
 function createInitialBoard() {
-  const categories = [
-    "red",
-    "red",
-    "red",
-    "red",
-    "red",
-    "red",
-    "red",
-    "red",
-    "red", // 9 vermelhas
-    "blue",
-    "blue",
-    "blue",
-    "blue",
-    "blue",
-    "blue",
-    "blue",
-    "blue", // 8 azuis
-    "neutral",
-    "neutral",
-    "neutral",
-    "neutral",
-    "neutral",
-    "neutral",
-    "neutral", // 7 cinzas
-    "black", // 1 preta
-  ];
+  // Criar array de categorias com quantidade correta
+  const cardTypes = [];
+  for (let i = 0; i < 9; i++)
+    cardTypes.push({ category: "red", imageIndex: i });
+  for (let i = 0; i < 8; i++)
+    cardTypes.push({ category: "blue", imageIndex: i });
+  for (let i = 0; i < 7; i++)
+    cardTypes.push({ category: "neutral", imageIndex: 0 });
+  cardTypes.push({ category: "black", imageIndex: 0 });
 
-  const shuffledCategories = shuffleArray([...categories]);
-  const uniqueWords = Array.from(new Set(words));
-  const shuffledWords = shuffleArray([...uniqueWords]).slice(0, 25);
+  // Embaralhar os tipos de carta
+  for (let i = cardTypes.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cardTypes[i], cardTypes[j]] = [cardTypes[j], cardTypes[i]];
+  }
 
-  // Criar índices sequenciais e embaralhar
-  const redIndices = Array.from({ length: 9 }, (_, i) => i);
-  const blueIndices = Array.from({ length: 8 }, (_, i) => i);
-  const shuffledRedIndices = shuffleArray([...redIndices]);
-  const shuffledBlueIndices = shuffleArray([...blueIndices]);
+  // Pegar palavras únicas embaralhadas
+  const uniqueWords = [...new Set(words)];
+  const shuffledWords = [];
+  for (let i = uniqueWords.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [uniqueWords[i], uniqueWords[j]] = [uniqueWords[j], uniqueWords[i]];
+  }
 
-  let redCounter = 0;
-  let blueCounter = 0;
-
+  // Criar board 5x5
   const board = [];
   for (let row = 0; row < 5; row++) {
     board[row] = [];
     for (let col = 0; col < 5; col++) {
       const index = row * 5 + col;
-      const category = shuffledCategories[index];
-
-      let imageIndex = 0;
-      if (category === "red") {
-        imageIndex = shuffledRedIndices[redCounter];
-        redCounter++;
-      } else if (category === "blue") {
-        imageIndex = shuffledBlueIndices[blueCounter];
-        blueCounter++;
-      }
-
       board[row][col] = {
         word: shuffledWords[index],
         revealed: false,
-        category: category,
-        imageIndex: imageIndex,
+        category: cardTypes[index].category,
+        imageIndex: cardTypes[index].imageIndex,
       };
     }
   }
