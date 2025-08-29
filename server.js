@@ -42,26 +42,34 @@ io.on("connection", (socket) => {
   socket.on("create-room", (roomId) => {
     console.log(`Create room request: ${roomId}`);
     if (!rooms[roomId]) {
+      const initialBoard = createInitialBoard();
+      console.log("Initial board created:", initialBoard[0][0]); // Debug da primeira célula
+
       rooms[roomId] = {
-        board: createInitialBoard(),
+        board: initialBoard,
         players: {},
-        spymasters: { blue: null, red: null }, // Inicializa os Spymasters com valores nulos
+        spymasters: { blue: null, red: null },
         gameStatus: "playing",
         blackWordRevealed: false,
         currentTeam: "blue",
       };
+
       io.emit(
         "rooms-update",
         Object.keys(rooms).map((id) => ({ roomId: id }))
       );
       console.log(`Room created: ${roomId}`);
     }
+
     socket.join(roomId);
     const playerColor = assignPlayerColor(roomId);
     rooms[roomId].players[socket.id] = {
       color: playerColor,
       isSpymaster: false,
     };
+
+    console.log("Sending board to client:", rooms[roomId].board[0][0]); // Debug
+
     socket.emit("room-data", {
       roomId,
       message: "You joined the room!",
@@ -72,6 +80,7 @@ io.on("connection", (socket) => {
       currentTeam: rooms[roomId].currentTeam,
       spymasters: rooms[roomId].spymasters,
     });
+
     socket.to(roomId).emit("room-data", {
       message: `Client ${socket.id} joined the room!`,
       board: rooms[roomId].board,
@@ -127,13 +136,10 @@ io.on("connection", (socket) => {
     if (room) {
       room.currentTeam = newTurn;
 
-      // Envia para TODOS os jogadores na sala
       io.to(roomId).emit("room-data", {
         currentTeam: room.currentTeam,
-        message: `Turn passed to ${newTurn} team`,
       });
 
-      // Também emite o evento específico de mudança de turno
       io.to(roomId).emit("turn-changed", { newTurn });
     }
   });
@@ -239,10 +245,7 @@ io.on("connection", (socket) => {
     const player = room.players[socket.id];
 
     if (!player) return;
-
-    if (!player.isSpymaster && cell.revealed) {
-      return;
-    }
+    if (!player.isSpymaster && cell.revealed) return;
 
     if (player.isSpymaster) {
       room.board = room.board.map((rowArr) =>
@@ -250,10 +253,10 @@ io.on("connection", (socket) => {
       );
     } else {
       const newBoard = room.board.map((rowArr, rowIndex) =>
-        rowArr.map((cell, colIndex) =>
+        rowArr.map((cellItem, colIndex) =>
           rowIndex === row && colIndex === col
-            ? { ...cell, revealed: true }
-            : cell
+            ? { ...cellItem, revealed: true }
+            : cellItem
         )
       );
 
@@ -265,10 +268,8 @@ io.on("connection", (socket) => {
         gameStatus = "lost";
         blackWordRevealed = true;
       } else if (cell.category !== currentTeam) {
-        // Se clicou em carta que NÃO é da equipe atual, passa a vez
         currentTeam = currentTeam === "blue" ? "red" : "blue";
       }
-      // Se clicou em carta da própria equipe, continua o turno
 
       room.board = newBoard;
       room.gameStatus = gameStatus;
@@ -375,43 +376,43 @@ function createInitialBoard() {
     "black", // 1 preta
   ];
 
-  const shuffledCategories = shuffleArray(categories);
-
-  // Garantir que temos palavras únicas suficientes
+  const shuffledCategories = shuffleArray([...categories]);
   const uniqueWords = Array.from(new Set(words));
-  if (uniqueWords.length < 25) {
-    throw new Error("Não há palavras únicas suficientes");
-  }
+  const shuffledWords = shuffleArray([...uniqueWords]).slice(0, 25);
 
-  const shuffledWords = shuffleArray(uniqueWords).slice(0, 25);
+  // Criar índices sequenciais e embaralhar
+  const redIndices = Array.from({ length: 9 }, (_, i) => i);
+  const blueIndices = Array.from({ length: 8 }, (_, i) => i);
+  const shuffledRedIndices = shuffleArray([...redIndices]);
+  const shuffledBlueIndices = shuffleArray([...blueIndices]);
 
-  // Gerar índices únicos para as imagens
-  const redIndices = shuffleArray(Array.from({ length: 9 }, (_, i) => i));
-  const blueIndices = shuffleArray(Array.from({ length: 8 }, (_, i) => i));
+  let redCounter = 0;
+  let blueCounter = 0;
 
-  let redIndexCounter = 0;
-  let blueIndexCounter = 0;
-
-  const board = Array.from({ length: 5 }, (_, row) =>
-    Array.from({ length: 5 }, (_, col) => {
+  const board = [];
+  for (let row = 0; row < 5; row++) {
+    board[row] = [];
+    for (let col = 0; col < 5; col++) {
       const index = row * 5 + col;
       const category = shuffledCategories[index];
 
       let imageIndex = 0;
       if (category === "red") {
-        imageIndex = redIndices[redIndexCounter++];
+        imageIndex = shuffledRedIndices[redCounter];
+        redCounter++;
       } else if (category === "blue") {
-        imageIndex = blueIndices[blueIndexCounter++];
+        imageIndex = shuffledBlueIndices[blueCounter];
+        blueCounter++;
       }
 
-      return {
+      board[row][col] = {
         word: shuffledWords[index],
         revealed: false,
         category: category,
         imageIndex: imageIndex,
       };
-    })
-  );
+    }
+  }
 
   return board;
 }
